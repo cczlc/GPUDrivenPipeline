@@ -1,0 +1,169 @@
+﻿#pragma kernel InstanceCull
+
+bool _isOpenGL;										// 是否使用OpenGL的API
+uint _instanceCount;								// 待处理的实例数量
+uint _depthTextureSize;								// 原始深度图大小
+float4 _planes[6];									// 视锥体6个平面
+float4 _bounds[8];									// 实例包围盒8个顶点
+float4x4 _vpMatrix;									// 相机的vp矩阵
+Texture2D _hizTexture;								// hiz纹理
+
+RWStructuredBuffer<float4x4> _instanceMatrixBuffer;	// 所有实例的M矩阵
+AppendStructuredBuffer<float4x4> _cullResultBuffer;	// 剔除后保留的实例
+RWStructuredBuffer<uint> _argsBuffer;               // 绘制参数
+
+// in：世界空间的包围盒坐标
+// out：是否被遮挡剔除
+bool OcclusionCull(float4 worldBound[8])
+{
+	float minX = 1, minY = 1, minZ = 1, maxX = -1, maxY = -1, maxZ = -1;
+	for(int i = 0; i < 8; ++i) 
+	{
+		float4 ndcBound = mul(_vpMatrix, worldBound[i]);
+		ndcBound.xyz = ndcBound.xyz / ndcBound.w;
+		ndcBound.w = 1;
+		if (minX > ndcBound.x) minX = ndcBound.x;
+        if (minY > ndcBound.y) minY = ndcBound.y;
+        if (minZ > ndcBound.z) minZ = ndcBound.z;
+        if (maxX < ndcBound.x) maxX = ndcBound.x;
+        if (maxY < ndcBound.y) maxY = ndcBound.y;
+        if (maxZ < ndcBound.z) maxZ = ndcBound.z;
+	}
+
+	// ndc的AABB的左下角和右上角的uv坐标，ndc的-1到1转换为uv的0到1
+    float2 uvLeftBottom = float2(minX, minY) * 0.5f + 0.5f;
+	float2 uvRightTop = float2(maxX, maxY) * 0.5f + 0.5f;
+
+	// DirextX下NDC的z值即为深度（因为MVP变换后是反转过的，所以要取最大的那个值）
+    float depth = maxZ;
+
+	// 如果是OpenGL,首先要取最小的那个z值，然后需要 *0.5+0.5 转换到 0-1 的深度值
+    if (_isOpenGL) {
+        depth = minZ;
+        depth = depth * 0.5f + 0.5f;
+    }
+
+	// 计算应该读取哪层mipmap
+    uint mipmapLevel = (uint)clamp(log2(max(maxX - minX, maxY - minY) * 0.5f * _depthTextureSize), 0, log2(_depthTextureSize) - 4);
+	// 当前mipmap的大小
+    uint size = _depthTextureSize / (1 << mipmapLevel);
+
+	// 左下角和右上角点所在的像素
+	uint2 pixelLeftBottom = uint2(clamp(uvLeftBottom.x * size, 0, size - 1),  clamp(uvLeftBottom.y  * size, 0, size - 1));
+	uint2 pixelRightTop = uint2(clamp(uvRightTop.x * size, 0, size - 1), clamp(uvRightTop.y * size, 0, size - 1));
+
+    // 采样对应深度图的对应像素的深度值，并且作比较
+    float depthInTexture = _hizTexture.mips[mipmapLevel][pixelLeftBottom].r;
+
+	if(_isOpenGL) {
+		// 需要采样四个像素
+		if (pixelLeftBottom.x < pixelRightTop.x && pixelLeftBottom.y < pixelRightTop.y) {
+            depthInTexture = max(max(depthInTexture, _hizTexture.mips[mipmapLevel][pixelRightTop].r),
+                max(_hizTexture.mips[mipmapLevel][int2(pixelLeftBottom.x, pixelRightTop.y)].r, _hizTexture.mips[mipmapLevel][int2(pixelRightTop.x, pixelLeftBottom.y)].r));
+        }
+		// 需要采样左右两个像素
+		else if (pixelLeftBottom.x < pixelRightTop.x)
+            depthInTexture = max(depthInTexture, _hizTexture.mips[mipmapLevel][int2(pixelRightTop.x, pixelLeftBottom.y)].r);
+		// 需要采样上下两个像素
+		else if (pixelLeftBottom.y < pixelRightTop.y)
+            depthInTexture = max(depthInTexture, _hizTexture.mips[mipmapLevel][int2(pixelLeftBottom.x, pixelRightTop.y)].r);
+	
+		// 物体距离相机最近的深度仍然比深度图上最远的深度更远 
+	    if (depthInTexture < depth)
+			return true;	
+	}
+	else {
+		if (pixelLeftBottom.x < pixelRightTop.x && pixelLeftBottom.y < pixelRightTop.y) {
+            depthInTexture = min(min(depthInTexture, _hizTexture.mips[mipmapLevel][pixelRightTop].r),
+                min(_hizTexture.mips[mipmapLevel][int2(pixelLeftBottom.x, pixelRightTop.y)].r, _hizTexture.mips[mipmapLevel][int2(pixelRightTop.x, pixelLeftBottom.y)].r));
+        }
+        else if (pixelLeftBottom.x < pixelRightTop.x)
+            depthInTexture = min(depthInTexture, _hizTexture.mips[mipmapLevel][int2(pixelRightTop.x, pixelLeftBottom.y)].r);
+        else if (pixelLeftBottom.y < pixelRightTop.y)
+            depthInTexture = min(depthInTexture, _hizTexture.mips[mipmapLevel][int2(pixelLeftBottom.x, pixelRightTop.y)].r);
+
+        if (depthInTexture > depth)
+            return true;
+	}
+
+	return false;
+}
+
+bool IsInClipSpace(float4 clipSpacePosition)
+{
+    if (_isOpenGL)
+        return clipSpacePosition.x > -clipSpacePosition.w && clipSpacePosition.x < clipSpacePosition.w&&
+        clipSpacePosition.y > -clipSpacePosition.w && clipSpacePosition.y < clipSpacePosition.w&&
+        clipSpacePosition.z > -clipSpacePosition.w && clipSpacePosition.z < clipSpacePosition.w;
+    else
+        return clipSpacePosition.x > -clipSpacePosition.w && clipSpacePosition.x < clipSpacePosition.w&&
+        clipSpacePosition.y > -clipSpacePosition.w && clipSpacePosition.y < clipSpacePosition.w&&
+        clipSpacePosition.z > 0 && clipSpacePosition.z < clipSpacePosition.w;
+}
+
+// in：世界空间下的包围盒
+// out：是否被视锥剔除
+bool FrustumCull(float4 worldBound[8])
+{
+	// 对于任意一个视锥平面
+	for(int i = 0; i < 6; ++i) 
+	{
+		// 判断8个顶点是否均在该面外
+		for(int j = 0; j < 8; ++j)
+		{
+			// 如果不在该面的外面
+			if(!(dot(_planes[i].xyz, worldBound[j].xyz) + _planes[i].w < 0))
+			{
+				break;
+			}
+
+			// 所有点都在该面外，需要被剔除
+			if(j == 7) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+
+	// bool isInClipSpace = false;
+    // for (int i = 0; i < 8; i++)
+    // {
+	// 	float4 clipSpace = mul(_vpMatrix, worldBound[i]);
+	// 	if (!isInClipSpace && IsInClipSpace(clipSpace))
+    //         isInClipSpace = true;
+	// }
+	// 
+	// return isInClipSpace;
+}
+
+
+[numthreads(640, 1, 1)]
+void InstanceCull(uint3 id : SV_DISPATCHTHREADID)
+{
+	if(id.x >= _instanceCount) return;	// 防止访问越界
+
+	float4x4 modelMatrix = _instanceMatrixBuffer[id.x];
+
+	float4 worldBound[8];				// AABB包围盒在世界空间的8个顶点坐标
+	worldBound[0] = mul(modelMatrix, _bounds[0]);
+	worldBound[1] = mul(modelMatrix, _bounds[1]);
+	worldBound[2] = mul(modelMatrix, _bounds[2]);
+	worldBound[3] = mul(modelMatrix, _bounds[3]);
+	worldBound[4] = mul(modelMatrix, _bounds[4]);
+	worldBound[5] = mul(modelMatrix, _bounds[5]);
+	worldBound[6] = mul(modelMatrix, _bounds[6]);
+	worldBound[7] = mul(modelMatrix, _bounds[7]);
+
+	// 判断视锥剔除
+	if(FrustumCull(worldBound)) return;
+
+	// 判断遮挡剔除
+	if(OcclusionCull(worldBound)) return;
+
+	_cullResultBuffer.Append(modelMatrix);		// 保存变换矩阵
+	InterlockedAdd(_argsBuffer[1], 1);          // 绘制计数增加 1
+}
+
+
+

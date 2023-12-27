@@ -1,0 +1,84 @@
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.Profiling;
+using UnityEngine.Rendering;
+
+partial class CameraRender
+{
+    partial void PrepareBuffer();
+    partial void DrawUnsupportedShaders();
+    partial void DrawGizmosBeforeFX();
+    partial void DrawGizmosAfterFX();
+
+
+#if UNITY_EDITOR
+    // 获取Unity默认的shader tag id
+    static ShaderTagId[] legacyShaderTagIds = {
+        new ShaderTagId("Always"),
+        new ShaderTagId("ForwardBase"),
+        new ShaderTagId("PrepassBase"),
+        new ShaderTagId("Vertex"),
+        new ShaderTagId("VertexLMRGBM"),
+        new ShaderTagId("VertexLM")
+    };
+
+    // Error Material
+    static Material errorMaterial;
+
+    string SampleName { get; set; }
+
+    partial void PrepareBuffer()
+    {
+        Profiler.BeginSample("Editor Only");
+        // 对每个摄像机使用不同的Sample Name
+        buffer.name = SampleName = camera.name;
+        Profiler.EndSample();
+    }
+
+    partial void DrawUnsupportedShaders()
+    {
+        // 使用默认的Error材质
+        if (errorMaterial == null)
+        {
+            errorMaterial = new Material(Shader.Find("Hidden/InternalErrorShader"));
+        }
+
+        // 绘制不支持的Shader Pass的物体
+        var drawingSettings = new DrawingSettings(legacyShaderTagIds[0], new SortingSettings(camera))
+        {
+            // 设置覆写的材质
+            overrideMaterial = errorMaterial
+        };
+
+        // 设置更多在此次DrawCall中要渲染的ShaderPass，也就是不支持的ShaderPass
+        for (int i = 1; i < legacyShaderTagIds.Length; i++)
+        {
+            drawingSettings.SetShaderPassName(i, legacyShaderTagIds[i]);
+        }
+
+        var filteringSettings = FilteringSettings.defaultValue;
+        context.DrawRenderers(cullingResults, ref drawingSettings, ref filteringSettings);
+    }
+
+    partial void DrawGizmosBeforeFX()
+    {
+        // Scene窗口中绘制Gizmos
+        if (Handles.ShouldRenderGizmos())
+        {
+            context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
+        }
+    }
+
+    partial void DrawGizmosAfterFX()
+    {
+        // Scene窗口中绘制Gizmos
+        if (Handles.ShouldRenderGizmos())
+        {
+            context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
+        }
+    }
+
+#else
+    const string SampleName = bufferName;
+#endif
+}
