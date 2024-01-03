@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8a15c71f7a8bff54e99bc4a24a34d1ae, type: 3}
+  m_Name: ClusterTest
+  m_EditorClassIdentifier: 
+  mats:
+  - e00: 0.5703201
+    e01: 0.00629901
+    e02: -0.8213983
+    e03: -30.130783
+    e10: -4.656613e-10
+    e11: 0.9999706
+    e12: 0.007668416
+    e13: 0.28129518
+    e20: 0.8214225
+    e21: -0.0043734517
+    e22: 0.5703034
+    e23: 20.920036
+    e30: 0
+    e31: 0
+    e32: 0
+    e33: 1
+  subMeshIndex: 0
+  instanceCount: 1
+  instanceMesh: {fileID: 4300000, guid: fa4d45e44918ae3469a87044c23e5ed3, type: 2}
+  instanceMaterial: {fileID: 2100000, guid: 142749c6cd4c1e84e8c23203c05b93d5, type: 2}
+  center: {x: 0, y: 0, z: 0}
+  randomInstanceNum: 1
+  distanceMin: 5
+  distanceMax: 50
+  heightMin: -0.5
+  heightMax: 0.5

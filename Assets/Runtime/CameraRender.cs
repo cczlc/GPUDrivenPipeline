@@ -14,6 +14,9 @@ public partial class CameraRender
     InstanceDrawer instanceDrawer;
     InstanceSetting instanceSetting;
 
+    // cluster Generate
+    ClusterManagerForScene clusterManagerForScene;
+
     // hizBufferÉú³É
     HizGenerator hizGenerator;
     RenderTexture hizDepthTexture = null;
@@ -72,6 +75,9 @@ public partial class CameraRender
         defaultCameraSettings = new CameraSettings();
 
         this.cameraRenderMat = CoreUtils.CreateEngineMaterial(cameraRenderShader);
+
+        clusterManagerForScene = new ClusterManagerForScene();
+        clusterManagerForScene.ClusterGenerateForScene();
     }
 
     public void Dispose()

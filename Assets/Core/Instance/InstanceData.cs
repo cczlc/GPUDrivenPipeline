@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 [CreateAssetMenu(menuName = "GPURendering/InstanceData")]
 [System.Serializable]
@@ -74,6 +75,7 @@ public class InstanceData : ScriptableObject
 
     public void Release()
     {
+        ClusterGenerator.ClusterClear();
         // 是否有垃圾回收机制
         argsBuffer?.Release();
         argsBuffer = null;

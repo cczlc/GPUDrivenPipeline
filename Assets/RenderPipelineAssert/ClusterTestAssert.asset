@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0ef62992bfb092840be5331208b9e0bc, type: 3}
+  m_Name: ClusterTestAssert
+  m_EditorClassIdentifier: 
+  useDynamicBatching: 1
+  cameraRenderShader: {fileID: 4800000, guid: 263690c2ce66f5c4e9926ee42b63790d, type: 3}
+  hizGeneratorMat: {fileID: 2100000, guid: e54e88e0510006b4082813b2dd34a0a9, type: 2}
+  instanceSetting:
+    instanceCull: {fileID: 7200000, guid: 522563e24c399f64d8d1b473a703aba6, type: 3}
+    instanceDatas: []
